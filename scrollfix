@@ -1,23 +1,37 @@
-# save current screen by switching to alt screen
-tput smcup
+#!/usr/bin/env bash
+# scrollfix — reset the terminal to a sane state after a program leaves it messed up
+# (stuck mouse/focus reporting, line-drawing garbage, frozen rendering, stuck
+#  scroll region, invisible cursor, garbled paste, etc.)
 
-# turn off bracketed paste mode
-printf '\e[?2004l'
+# Only act on a real terminal
+[ -t 1 ] || exit 0
 
-# disable mouse/focus reporting modes and show the cursor
-printf '\033[?1000l\033[?1002l\033[?1003l\033[?1004l\033[?1005l\033[?1006l\033[?1015l\033[?1016l\033[?25h'
+# Preserve the current view by doing the noisy work on the alternate screen
+tput smcup 2>/dev/null
 
-# restore sane terminal settings
-stty sane
-
-# full terminal reset
+# Big hammer first: full reset + sane line discipline
+stty sane 2>/dev/null
 reset
 
-# ensure cursor is visible
-tput cnorm
+# Targeted cleanup of DEC private modes `reset` doesn't reliably clear.
+# Sent AFTER reset so its init strings can't re-dirty them. One write, atomic.
+printf '\e[?2004l'   # bracketed paste off
+printf '\e[?1004l'   # focus reporting off  (the stray [I / [O events)
+printf '\e[?2026l'   # synchronized output off (a stuck 2026h freezes drawing)
+printf '\e[?2031l'   # theme-change notifications off
+printf '\e[?9l\e[?1000l\e[?1001l\e[?1002l\e[?1003l\e[?1005l\e[?1006l\e[?1007l\e[?1015l\e[?1016l'  # all mouse tracking + ext encodings off
+printf '\e[?7h'      # autowrap back on (fixes truncated-at-edge lines)
+printf '\e(B\e)B'    # G0/G1 charsets back to ASCII (fixes qqqqlkx line-drawing garbage)
+printf '\e[0m'       # clear colors/attributes
+printf '\e[0 q'      # default cursor shape
 
-# flush stale input from stdin
-read -t 0.1 -n 10000 discard 2>/dev/null
+# Drain any stale input already queued (mouse/focus byte floods) until empty
+if [ -t 0 ]; then
+    while read -rt 0.05 -n 4096 _discard 2>/dev/null; do :; done
+fi
 
-# restore original screen
-tput rmcup
+# Back to the original screen, then make sure THAT buffer is sane too
+tput rmcup 2>/dev/null
+printf '\e[r'        # reset scroll region / margins on the visible screen
+printf '\e[?25h'     # cursor visible
+tput cnorm 2>/dev/null

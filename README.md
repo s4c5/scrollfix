@@ -35,8 +35,16 @@ That's it. No flags, no options.
 
 ## What it does
 
-1. Switches to the alternate screen buffer (preserves your current view)
-2. Disables bracketed paste mode
-3. Fully resets the terminal (`reset`) — restores all settings, disables mouse tracking, fixes stuck colors/attributes
-4. Restores cursor visibility
-5. Switches back to the original screen buffer
+1. Bails out if not run on a real terminal (safe to call from scripts/pipes)
+2. Switches to the alternate screen buffer (preserves your current view)
+3. Runs the big hammer: `stty sane` + `reset`
+4. Clears DEC private modes `reset` misses, *after* reset so they can't get
+   re-dirtied: bracketed paste, focus reporting, synchronized output, all mouse
+   tracking modes, autowrap, charset (line-drawing → ASCII), colors, cursor shape
+5. Drains any stale queued input (mouse/focus byte floods) until empty
+6. Switches back to the original screen and resets its scroll region + cursor
+
+## Requirements
+
+`bash` (the input-flush loop uses `read -t`/`-n`, which POSIX `sh`/`dash` lack).
+The `#!/usr/bin/env bash` shebang handles this on Linux and macOS alike.
