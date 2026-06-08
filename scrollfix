@@ -12,11 +12,11 @@ stty sane 2>/dev/null
 # Soft terminal reset (DECSTR): restores cursor visibility, origin mode, insert
 # mode, etc. to defaults WITHOUT clearing the screen or scrollback. This replaces
 # `reset`, which sends RIS (\ec) and nukes the buffer — the whole bug.
+#
+# Note: we do NOT switch screen buffers (no smcup/rmcup, no \e[?1049l). An
+# unpaired buffer switch makes some emulators repaint from a stale/empty saved
+# state, which blanks the screen. Everything below sanitizes the buffer in place.
 printf '\e[!p'
-
-# Make sure we end on the main screen (restores it if a crashed TUI left us on
-# the alternate buffer). 1049l restores — it does NOT clear — the main buffer.
-printf '\e[?1049l'
 
 # Clear the DEC private modes DECSTR doesn't cover, in one atomic write:
 printf '\e[?2004l\e[?1004l\e[?2026l\e[?2031l'    # bracketed paste, focus reporting, sync output, theme-notify
