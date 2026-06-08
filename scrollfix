@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
-# scrollfix — reset terminal modes to sane defaults WITHOUT wiping the screen
-# or scrollback. Fixes stuck mouse/focus reporting, line-drawing garbage,
-# frozen rendering, stuck scroll region, invisible cursor, garbled paste, etc.
+# scrollfix — reset terminal modes to sane defaults AND return to the primary
+# screen buffer, WITHOUT wiping the screen or scrollback, on ANY terminal.
+#
+# Two behaviors that earlier versions wrongly tangled together:
+#   * RESCUE: switch back to the primary buffer (recovers from a TUI like emacs
+#     that exited leaving you stuck on the alternate buffer). This is \e[?1049l
+#     — exactly what `tput rmcup` does. It does NOT clear anything; the primary
+#     buffer's contents were preserved the whole time you were on the alt buffer.
+#   * WIPE:  `reset` (sends RIS, \ec) and DECSTR (\e[!p) clear the screen and/or
+#     scrollback on some terminals. THOSE were the bug, and they are gone.
+# We keep the rescue, drop the wipes, and never switch *to* the alt buffer first
+# (no smcup), so there's no flicker. No tput, so no terminfo/TERM dependency.
 
 # Only act on a real terminal
 [ -t 1 ] || exit 0
@@ -9,29 +18,32 @@
 # Line discipline (echo, canonical mode, flow control). No effect on screen content.
 stty sane 2>/dev/null
 
-# Soft terminal reset (DECSTR): restores cursor visibility, origin mode, insert
-# mode, etc. to defaults WITHOUT clearing the screen or scrollback. This replaces
-# `reset`, which sends RIS (\ec) and nukes the buffer — the whole bug.
-#
-# Note: we do NOT switch screen buffers (no smcup/rmcup, no \e[?1049l). An
-# unpaired buffer switch makes some emulators repaint from a stale/empty saved
-# state, which blanks the screen. Everything below sanitizes the buffer in place.
-printf '\e[!p'
+# THE RESCUE: return to the primary screen buffer. Covers every alt-buffer mode
+# a program might have used (1049 modern, 1047/47 legacy). Switching back shows
+# the preserved primary contents — it does not clear them.
+printf '\e[?1049l\e[?1047l\e[?47l'
 
-# Clear the DEC private modes DECSTR doesn't cover, in one atomic write:
-printf '\e[?2004l\e[?1004l\e[?2026l\e[?2031l'    # bracketed paste, focus reporting, sync output, theme-notify
-printf '\e[?9l\e[?1000l\e[?1001l\e[?1002l\e[?1003l\e[?1005l\e[?1006l\e[?1007l\e[?1015l\e[?1016l'  # all mouse tracking + encodings
-printf '\e[?7h'      # autowrap back on (fixes truncated-at-edge lines)
-printf '\e>'         # numeric keypad (DECKPNM)
+# Clean the state that DECSC (\e7) snapshots, so the cursor save/restore is sane.
+printf '\e[m'        # SGR attributes off (color/bold/reverse)
 printf '\e(B\e)B'    # G0/G1 charsets back to ASCII (fixes qqqqlkx line-drawing garbage)
-printf '\e[r'        # reset scroll region / margins
-printf '\e[m'        # clear colors/attributes
+printf '\e[?7h'      # autowrap on
+
+# Reset scroll region (DECSTBM homes the cursor as a side effect) bracketed by
+# save/restore so the cursor doesn't visibly move.
+printf '\e7'
+printf '\e[r'
+printf '\e8'
+
+# Remaining toggles — none of these move the cursor or clear anything:
+printf '\e[4l'       # replace mode (insert mode off)
+printf '\e[?1l'      # normal cursor keys (fixes arrows printing ^[OA at the shell)
+printf '\e>'         # numeric keypad (DECKPNM)
 printf '\e[0 q'      # default cursor shape
 printf '\e[?25h'     # cursor visible
+printf '\e[?2004l\e[?1004l\e[?2026l\e[?2031l'    # bracketed paste, focus reporting, sync output, theme-notify
+printf '\e[?9l\e[?1000l\e[?1001l\e[?1002l\e[?1003l\e[?1005l\e[?1006l\e[?1007l\e[?1015l\e[?1016l'  # all mouse tracking + encodings
 
 # Drain any stale input already queued (mouse/focus byte floods) until empty
 if [ -t 0 ]; then
     while read -rt 0.05 -n 4096 _discard 2>/dev/null; do :; done
 fi
-
-tput cnorm 2>/dev/null
