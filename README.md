@@ -35,14 +35,20 @@ That's it. No flags, no options.
 
 ## What it does
 
+It fixes the terminal **non-destructively** — your screen contents and
+scrollback are left untouched. (It deliberately avoids `reset`, which sends a
+hard RIS that wipes the screen *and* scrollback.)
+
 1. Bails out if not run on a real terminal (safe to call from scripts/pipes)
-2. Switches to the alternate screen buffer (preserves your current view)
-3. Runs the big hammer: `stty sane` + `reset`
-4. Clears DEC private modes `reset` misses, *after* reset so they can't get
-   re-dirtied: bracketed paste, focus reporting, synchronized output, all mouse
-   tracking modes, autowrap, charset (line-drawing → ASCII), colors, cursor shape
-5. Drains any stale queued input (mouse/focus byte floods) until empty
-6. Switches back to the original screen and resets its scroll region + cursor
+2. `stty sane` — restores line discipline (echo, canonical mode, flow control)
+3. `DECSTR` soft reset (`\e[!p`) — restores cursor, wrap, origin, insert mode,
+   etc. to defaults without clearing anything
+4. Ensures you're back on the main screen if a crashed TUI left you on the
+   alternate buffer (restores it — does not clear it)
+5. Clears the modes a soft reset misses: bracketed paste, focus reporting,
+   synchronized output, all mouse tracking, autowrap, keypad, charset
+   (line-drawing → ASCII), scroll region, colors, cursor shape
+6. Drains any stale queued input (mouse/focus byte floods) until empty
 
 ## Requirements
 
