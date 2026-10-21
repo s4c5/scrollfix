@@ -34,6 +34,12 @@ printf '\e7'
 printf '\e[r'
 printf '\e8'
 
+# Left/right margin mode off (DECLRMM). tmux turns this on for iTerm2 and never
+# turns it off if ssh dies. While it's on, CSI s means "set left/right margins +
+# home the cursor" instead of "save cursor", so anything doing \e[s...\e[u (like
+# a prompt hook stamping the time) keeps snapping the cursor back to a stale spot.
+printf '\e[?69l'
+
 # Remaining toggles — none of these move the cursor or clear anything:
 printf '\e[4l'       # replace mode (insert mode off)
 printf '\e[?1l'      # normal cursor keys (fixes arrows printing ^[OA at the shell)

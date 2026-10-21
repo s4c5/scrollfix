@@ -47,7 +47,8 @@ hard RIS that wipes the screen *and* scrollback.)
    alternate buffer (restores it — does not clear it)
 5. Clears the modes a soft reset misses: bracketed paste, focus reporting,
    synchronized output, all mouse tracking, autowrap, keypad, charset
-   (line-drawing → ASCII), scroll region, colors, cursor shape
+   (line-drawing → ASCII), scroll region, left/right margin mode, colors,
+   cursor shape
 6. Drains any stale queued input (mouse/focus byte floods) until empty
 
 ## Requirements
